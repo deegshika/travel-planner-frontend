@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Waypoint — AI Trip Planner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,500&family=IBM+Plex+Mono:wght@500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#14213D;
+    --parchment:#F2E9D8;
+    --parchment-2:#EBDFC6;
+    --brass:#C89B3C;
+    --rust:#A6432F;
+    --line: rgba(20,33,61,0.18);
+    --white:#FCFAF3;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--ink);
+    background-image:
+      radial-gradient(circle at 20% 10%, rgba(200,155,60,0.08), transparent 40%),
+      radial-gradient(circle at 85% 80%, rgba(166,67,47,0.10), transparent 45%);
+    color:var(--parchment);
+    font-family:'Inter', sans-serif;
+    min-height:100vh;
+  }
+  .wrap{max-width:920px; margin:0 auto; padding:64px 24px 120px;}
+
+  header.hero{margin-bottom:56px;}
+  .eyebrow{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:12px;
+    letter-spacing:0.18em;
+    text-transform:uppercase;
+    color:var(--brass);
+    display:flex;
+    align-items:center;
+    gap:10px;
+    margin-bottom:18px;
+  }
+  .eyebrow::before{content:"✈"; font-size:14px;}
+  h1{
+    font-family:'Fraunces', serif;
+    font-weight:600;
+    font-size:clamp(38px, 6vw, 64px);
+    line-height:1.05;
+    margin:0 0 18px;
+    color:var(--white);
+  }
+  h1 em{font-style:italic; font-weight:500; color:var(--brass);}
+  .sub{
+    max-width:520px;
+    color:rgba(242,233,216,0.72);
+    font-size:16px;
+    line-height:1.6;
+  }
+
+  /* --- FORM CARD --- */
+  .card{
+    background:var(--parchment);
+    color:var(--ink);
+    border-radius:4px;
+    padding:40px;
+    box-shadow:0 30px 60px rgba(0,0,0,0.35);
+    position:relative;
+  }
+  .card::before{
+    content:"";
+    position:absolute; top:0; left:0; right:0; height:6px;
+    background:repeating-linear-gradient(90deg, var(--rust) 0 18px, transparent 18px 32px);
+    border-radius:4px 4px 0 0;
+  }
+  .grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:24px;
+  }
+  .field{margin-bottom:22px;}
+  .field.full{grid-column:1 / -1;}
+  label{
+    display:block;
+    font-family:'IBM Plex Mono', monospace;
+    font-size:11px;
+    letter-spacing:0.12em;
+    text-transform:uppercase;
+    color:var(--rust);
+    margin-bottom:8px;
+  }
+  input[type="text"], input[type="number"]{
+    width:100%;
+    border:none;
+    border-bottom:2px solid var(--line);
+    background:transparent;
+    font-family:'Fraunces', serif;
+    font-size:22px;
+    padding:6px 2px 10px;
+    color:var(--ink);
+    outline:none;
+    transition:border-color 0.2s;
+  }
+  input:focus{border-bottom-color:var(--rust);}
+  .chips{display:flex; flex-wrap:wrap; gap:10px;}
+  .chip{
+    font-family:'Inter', sans-serif;
+    font-size:14px;
+    font-weight:500;
+    padding:9px 16px;
+    border:1.5px solid var(--line);
+    border-radius:999px;
+    cursor:pointer;
+    user-select:none;
+    transition:all 0.15s;
+    background:var(--white);
+  }
+  .chip.active{
+    background:var(--ink);
+    border-color:var(--ink);
+    color:var(--parchment);
+  }
+  .submit-row{
+    display:flex; align-items:center; justify-content:space-between;
+    margin-top:28px; padding-top:24px; border-top:2px dashed var(--line);
+  }
+  .stub-code{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:12px;
+    color:rgba(20,33,61,0.45);
+  }
+  button.go{
+    font-family:'Inter', sans-serif;
+    font-weight:600;
+    font-size:15px;
+    background:var(--rust);
+    color:var(--white);
+    border:none;
+    padding:15px 28px;
+    border-radius:3px;
+    cursor:pointer;
+    transition:transform 0.15s, background 0.15s;
+  }
+  button.go:hover{background:#8E3925; transform:translateY(-1px);}
+  button.go:disabled{opacity:0.6; cursor:default; transform:none;}
+
+  /* --- RESULTS --- */
+  #results{margin-top:56px; display:none;}
+  #results.show{display:block;}
+  .status-line{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:13px;
+    color:var(--brass);
+    margin-bottom:20px;
+    display:flex; align-items:center; gap:10px;
+  }
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--brass);animation:pulse 1.2s infinite ease-in-out;}
+  @keyframes pulse{0%,100%{opacity:0.3;} 50%{opacity:1;}}
+
+  .plan-output{
+    background:var(--white);
+    color:var(--ink);
+    border-radius:4px;
+    padding:44px;
+    box-shadow:0 30px 60px rgba(0,0,0,0.35);
+    line-height:1.7;
+    font-size:15.5px;
+  }
+  .plan-output h1{font-size:28px; color:var(--ink); margin-top:0;}
+  .plan-output h2{
+    font-family:'Fraunces', serif;
+    font-style:italic;
+    font-weight:500;
+    font-size:20px;
+    color:var(--rust);
+    border-top:2px dashed var(--line);
+    padding-top:24px;
+    margin-top:32px;
+  }
+  .plan-output h2:first-of-type{border-top:none; padding-top:0; margin-top:0;}
+  .plan-output p{margin:0 0 14px;}
+  .plan-output ul, .plan-output ol{padding-left:22px;}
+  .plan-output li{margin-bottom:8px;}
+  .plan-output strong{color:var(--rust);}
+
+  .error-box{
+    background:rgba(166,67,47,0.15);
+    border:1.5px solid var(--rust);
+    color:var(--parchment);
+    padding:20px 24px;
+    border-radius:4px;
+    font-size:14px;
+    margin-top:20px;
+  }
+
+  @media (max-width:640px){
+    .grid{grid-template-columns:1fr;}
+    .card{padding:26px;}
+    .submit-row{flex-direction:column; align-items:stretch; gap:16px;}
+    button.go{width:100%;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <div class="eyebrow">Waypoint — trip generator</div>
+    <h1>Where to,<br><em>and for how much?</em></h1>
+    <p class="sub">Tell it a place, a few days, and a budget. It works out the rest — grounded in real local guides, not guesses.</p>
+  </header>
+
+  <form class="card" id="tripForm">
+    <div class="grid">
+      <div class="field">
+        <label for="destination">Destination</label>
+        <input type="text" id="destination" placeholder="Bangalore" required />
+      </div>
+      <div class="field">
+        <label for="days">Days</label>
+        <input type="number" id="days" min="1" max="14" placeholder="3" required />
+      </div>
+      <div class="field full">
+        <label for="budget">Total budget (₹)</label>
+        <input type="number" id="budget" min="500" placeholder="8000" required />
+      </div>
+      <div class="field full">
+        <label>Interests</label>
+        <div class="chips" id="chips">
+          <div class="chip" data-value="food">Food</div>
+          <div class="chip" data-value="photography">Photography</div>
+          <div class="chip" data-value="culture">Culture</div>
+          <div class="chip" data-value="nature">Nature</div>
+          <div class="chip" data-value="nightlife">Nightlife</div>
+          <div class="chip" data-value="shopping">Shopping</div>
+          <div class="chip" data-value="history">History</div>
+          <div class="chip" data-value="adventure">Adventure</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="submit-row">
+      <span class="stub-code" id="stubCode">NO. WP-000000</span>
+      <button type="submit" class="go" id="goBtn">Generate itinerary →</button>
+    </div>
+  </form>
+
+  <div id="results">
+    <div class="status-line" id="statusLine"><span class="dot"></span> Building your itinerary…</div>
+    <div class="plan-output" id="planOutput"></div>
+  </div>
+
+</div>
+
+<script>
+  // Change this to your deployed backend URL once you deploy to Render.
+  const API_URL = "https://travel-planner-backend-nlwx.onrender.com/plan-trip";
+
+  const chipsContainer = document.getElementById('chips');
+  const selectedInterests = new Set();
+
+  chipsContainer.addEventListener('click', (e) => {
+    const chip = e.target.closest('.chip');
+    if (!chip) return;
+    chip.classList.toggle('active');
+    const val = chip.dataset.value;
+    if (selectedInterests.has(val)) selectedInterests.delete(val);
+    else selectedInterests.add(val);
+  });
+
+  // Cosmetic ticket-stub number
+  document.getElementById('stubCode').textContent =
+    'NO. WP-' + Math.floor(100000 + Math.random() * 900000);
+
+  // Extremely small markdown-ish -> HTML converter (headings, bold, lists)
+  function renderPlan(markdown) {
+    let html = markdown
+      .replace(/^### (.*$)/gim, '<h3>$1</h3>')
+      .replace(/^## (.*$)/gim, '<h2>$1</h2>')
+      .replace(/^# (.*$)/gim, '<h1>$1</h1>')
+      .replace(/\*\*(.*?)\*\*/gim, '<strong>$1</strong>')
+      .replace(/^- (.*$)/gim, '<li>$1</li>')
+      .replace(/^\d+\.\s+(.*$)/gim, '<li>$1</li>');
+
+    // wrap consecutive <li> runs in <ul>
+    html = html.replace(/(<li>.*?<\/li>\n?)+/gims, (match) => `<ul>${match}</ul>`);
+
+    // turn remaining line breaks into paragraphs
+    html = html
+      .split('\n\n')
+      .map(block => (block.trim().startsWith('<') ? block : `<p>${block.trim()}</p>`))
+      .join('\n');
+
+    return html;
+  }
+
+  document.getElementById('tripForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    const destination = document.getElementById('destination').value.trim();
+    const days = parseInt(document.getElementById('days').value, 10);
+    const budget = parseInt(document.getElementById('budget').value, 10);
+    const interests = Array.from(selectedInterests);
+
+    if (interests.length === 0) {
+      alert('Pick at least one interest.');
+      return;
+    }
+
+    const results = document.getElementById('results');
+    const statusLine = document.getElementById('statusLine');
+    const planOutput = document.getElementById('planOutput');
+    const goBtn = document.getElementById('goBtn');
+
+    results.classList.add('show');
+    statusLine.style.display = 'flex';
+    planOutput.innerHTML = '';
+    goBtn.disabled = true;
+    goBtn.textContent = 'Working…';
+
+    try {
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ destination, days, budget, interests })
+      });
+
+      if (!response.ok) {
+        throw new Error(`Server responded with ${response.status}`);
+      }
+
+      const data = await response.json();
+      statusLine.style.display = 'none';
+      planOutput.innerHTML = renderPlan(data.final_plan || 'No plan returned.');
+    } catch (err) {
+      statusLine.style.display = 'none';
+      planOutput.innerHTML = `<div class="error-box">Couldn't reach the planner: ${err.message}. Make sure the backend is running at ${API_URL}.</div>`;
+    } finally {
+      goBtn.disabled = false;
+      goBtn.textContent = 'Generate itinerary →';
+    }
+  });
+</script>
+
+</body>
+</html>
