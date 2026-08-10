@@ -90,6 +90,45 @@
     margin-bottom:8px;
   }
   input[type="text"], input[type="number"]{
+  width:100%;
+  border:none;
+  border-bottom:2px solid var(--line);
+  background:transparent;
+  font-family:'Fraunces', serif;
+  font-size:22px;
+  padding:6px 2px 10px;
+  color:var(--ink);
+  outline:none;
+  transition:border-color 0.2s;
+}
+input:focus{border-bottom-color:var(--rust);}
+
+select{
+  width:100%;
+  border:none;
+  border-bottom:2px solid var(--line);
+  background:transparent;
+  font-family:'Fraunces', serif;
+  font-size:22px;
+  padding:6px 28px 10px 2px;
+  color:var(--ink);
+  outline:none;
+  transition:border-color 0.2s;
+  appearance:none;
+  -webkit-appearance:none;
+  -moz-appearance:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23A6432F' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;
+  background-position:right 2px center;
+  cursor:pointer;
+}
+select:focus{border-bottom-color:var(--rust);}
+select option{
+  background:var(--white);
+  color:var(--ink);
+  font-family:'Inter', sans-serif;
+  font-size:16px;
+}
     width:100%;
     border:none;
     border-bottom:2px solid var(--line);
@@ -214,7 +253,18 @@
     <div class="grid">
       <div class="field">
         <label for="destination">Destination</label>
-        <input type="text" id="destination" placeholder="Bangalore" required />
+        <select id="destination" required>
+          <option value="" disabled selected>Choose a city</option>
+          <option value="Bangalore">Bangalore</option>
+          <option value="Jaipur">Jaipur</option>
+          <option value="Mumbai">Mumbai</option>
+          <option value="Delhi">Delhi</option>
+          <option value="Goa">Goa</option>
+          <option value="Kodaikanal">Kodaikanal</option>
+          <option value="Ooty">Ooty</option>
+          <option value="Mysore">Mysore</option>
+          <option value="Shimla">Shimla</option>
+        </select>
       </div>
       <div class="field">
         <label for="days">Days</label>
