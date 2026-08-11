@@ -267,7 +267,14 @@
     color:var(--parchment);
     border:1px solid var(--brass);
   }
-  .replacement-highlight{background:#ffe58a; border-radius:3px; padding:2px 3px;}
+  .replacement-anchor{display:block; height:1px; scroll-margin-top:24px;}
+  .replacement-highlight{
+    background:#fff0ad;
+    border-left:4px solid var(--brass);
+    border-radius:3px;
+    padding:8px 10px;
+    margin-left:-14px;
+  }
   .packing-section{display:none; margin-top:40px;}
   .packing-controls{
     display:grid;
@@ -722,36 +729,37 @@
     document.getElementById('replaceStatus').style.display = 'none';
   }
 
-  function highlightReplacement(markdown) {
+  function activateReplacementAnchor(replacementMarkdown) {
     const planOutput = document.getElementById('planOutput');
     const temporary = document.createElement('div');
-    temporary.innerHTML = renderPlan(markdown);
-    const candidates = temporary.innerText
-      .split('\n')
-      .map(line => line.trim())
-      .filter(line => line.length > 5)
-      .sort((a, b) => b.length - a.length);
+    temporary.innerHTML = renderPlan(replacementMarkdown);
+    const replacementText = temporary.textContent.trim();
+    const startIndex = planOutput.textContent.indexOf(replacementText);
     const walker = document.createTreeWalker(planOutput, NodeFilter.SHOW_TEXT);
+    let traversed = 0;
+    let anchor = null;
 
-    while (walker.nextNode()) {
+    while (startIndex >= 0 && walker.nextNode()) {
       const node = walker.currentNode;
-      for (const candidate of candidates) {
-        const index = node.nodeValue.indexOf(candidate);
-        if (index < 0) continue;
+      const nodeEnd = traversed + node.nodeValue.length;
+      if (startIndex < nodeEnd) {
         const range = document.createRange();
-        range.setStart(node, index);
-        range.setEnd(node, index + candidate.length);
-        const mark = document.createElement('mark');
-        mark.className = 'replacement-highlight';
-        range.surroundContents(mark);
-        highlightedReplacement = mark;
-        mark.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        return;
+        range.setStart(node, Math.max(0, startIndex - traversed));
+        range.collapse(true);
+        anchor = document.createElement('span');
+        anchor.id = 'latestReplacementAnchor';
+        anchor.className = 'replacement-anchor';
+        anchor.setAttribute('aria-hidden', 'true');
+        range.insertNode(anchor);
+        break;
       }
+      traversed = nodeEnd;
     }
 
-    highlightedReplacement = planOutput;
-    planOutput.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    highlightedReplacement = anchor || planOutput;
+    const changedBlock = anchor?.parentElement.closest('p, li, h1, h2, h3');
+    if (changedBlock) changedBlock.classList.add('replacement-highlight');
+    highlightedReplacement.scrollIntoView({ behavior: 'auto', block: 'center' });
   }
 
   document.getElementById('editPlanBtn').addEventListener('click', () => {
@@ -877,17 +885,16 @@
     invalidatePlanConfirmation();
     resetChatForUpdatedPlan();
 
-    const replacementText = pendingReplacement.replacement_text;
     document.getElementById('replacePanel').style.display = 'none';
     document.getElementById('activityToReplace').value = '';
     document.getElementById('replacementPreference').value = '';
     resetReplacementPanel();
-    highlightReplacement(replacementText);
+    activateReplacementAnchor(lastReplacement.replacement.replacement_text);
   });
 
   document.getElementById('jumpToReplacementBtn').addEventListener('click', () => {
     (highlightedReplacement || document.getElementById('planOutput')).scrollIntoView({
-      behavior: 'smooth',
+      behavior: 'auto',
       block: 'center'
     });
   });
