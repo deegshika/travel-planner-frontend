@@ -89,46 +89,7 @@
     color:var(--rust);
     margin-bottom:8px;
   }
-  input[type="text"], input[type="number"]{
-  width:100%;
-  border:none;
-  border-bottom:2px solid var(--line);
-  background:transparent;
-  font-family:'Fraunces', serif;
-  font-size:22px;
-  padding:6px 2px 10px;
-  color:var(--ink);
-  outline:none;
-  transition:border-color 0.2s;
-}
-input:focus{border-bottom-color:var(--rust);}
-
-select{
-  width:100%;
-  border:none;
-  border-bottom:2px solid var(--line);
-  background:transparent;
-  font-family:'Fraunces', serif;
-  font-size:22px;
-  padding:6px 28px 10px 2px;
-  color:var(--ink);
-  outline:none;
-  transition:border-color 0.2s;
-  appearance:none;
-  -webkit-appearance:none;
-  -moz-appearance:none;
-  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23A6432F' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
-  background-repeat:no-repeat;
-  background-position:right 2px center;
-  cursor:pointer;
-}
-select:focus{border-bottom-color:var(--rust);}
-select option{
-  background:var(--white);
-  color:var(--ink);
-  font-family:'Inter', sans-serif;
-  font-size:16px;
-}
+  input[type="text"], input[type="number"], select{
     width:100%;
     border:none;
     border-bottom:2px solid var(--line);
@@ -300,6 +261,20 @@ select option{
     <div class="plan-output" id="planOutput"></div>
   </div>
 
+  <div id="askSection" style="display:none; margin-top: 40px;">
+    <div class="plan-output" style="padding: 32px;">
+      <h2 style="margin-top:0;">Ask a local expert</h2>
+      <p style="color: var(--ink); opacity: 0.7; margin-bottom: 20px;">Have a question about your trip? Ask anything — opening hours, what to pack, local etiquette.</p>
+      <div style="display:flex; gap: 12px;">
+        <input type="text" id="questionInput" placeholder="Is Hawa Mahal open on Mondays?" style="flex:1; border:none; border-bottom:2px solid var(--line); background:transparent; font-family:'Fraunces', serif; font-size:18px; padding:6px 2px 10px; color:var(--ink); outline:none;" />
+        <button type="button" id="askBtn" class="go" style="white-space:nowrap;">Ask →</button>
+      </div>
+      <div id="answerBox" style="margin-top: 20px; display:none;"></div>
+    </div>
+  </div>
+
+</div>
+
 </div>
 
 <script>
@@ -382,12 +357,40 @@ select option{
       const data = await response.json();
       statusLine.style.display = 'none';
       planOutput.innerHTML = renderPlan(data.final_plan || 'No plan returned.');
+      document.getElementById('askSection').style.display = 'block';
     } catch (err) {
       statusLine.style.display = 'none';
       planOutput.innerHTML = `<div class="error-box">Couldn't reach the planner: ${err.message}. Make sure the backend is running at ${API_URL}.</div>`;
     } finally {
       goBtn.disabled = false;
       goBtn.textContent = 'Generate itinerary →';
+    }
+  });
+
+  const ASK_URL = "https://travel-planner-backend-nlwx.onrender.com/ask";
+
+  document.getElementById('askBtn').addEventListener('click', async () => {
+    const question = document.getElementById('questionInput').value.trim();
+    if (!question) return;
+
+    const answerBox = document.getElementById('answerBox');
+    const askBtn = document.getElementById('askBtn');
+    answerBox.style.display = 'block';
+    answerBox.innerHTML = '<p style="color: var(--brass);">Thinking…</p>';
+    askBtn.disabled = true;
+
+    try {
+      const response = await fetch(ASK_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question })
+      });
+      const data = await response.json();
+      answerBox.innerHTML = `<p>${data.answer.replace(/\n/g, '<br>')}</p>`;
+    } catch (err) {
+      answerBox.innerHTML = `<p style="color: var(--rust);">Couldn't reach the assistant.</p>`;
+    } finally {
+      askBtn.disabled = false;
     }
   });
 </script>
