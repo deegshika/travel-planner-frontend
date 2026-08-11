@@ -280,6 +280,9 @@
 <script>
   // Change this to your deployed backend URL once you deploy to Render.
   const API_URL = "https://travel-planner-backend-nlwx.onrender.com/plan-trip";
+  let currentDestination = '';
+  let currentItinerary = '';
+  let chatHistory = [];
 
   const chipsContainer = document.getElementById('chips');
   const selectedInterests = new Set();
@@ -355,8 +358,13 @@
       }
 
       const data = await response.json();
+      currentDestination = destination;
+      currentItinerary = data.final_plan || '';
+      chatHistory = [];
       statusLine.style.display = 'none';
-      planOutput.innerHTML = renderPlan(data.final_plan || 'No plan returned.');
+      planOutput.innerHTML = renderPlan(currentItinerary || 'No plan returned.');
+      document.getElementById('answerBox').innerHTML = '';
+      document.getElementById('answerBox').style.display = 'none';
       document.getElementById('askSection').style.display = 'block';
     } catch (err) {
       statusLine.style.display = 'none';
@@ -383,10 +391,26 @@
       const response = await fetch(ASK_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question })
+        body: JSON.stringify({
+          question,
+          destination: currentDestination,
+          itinerary: currentItinerary,
+          history: chatHistory
+        })
       });
+
+      if (!response.ok) {
+        throw new Error(`Server responded with ${response.status}`);
+      }
+
       const data = await response.json();
+      chatHistory.push(
+        { role: 'user', content: question },
+        { role: 'assistant', content: data.answer }
+      );
+      chatHistory = chatHistory.slice(-20);
       answerBox.innerHTML = `<p>${data.answer.replace(/\n/g, '<br>')}</p>`;
+      document.getElementById('questionInput').value = '';
     } catch (err) {
       answerBox.innerHTML = `<p style="color: var(--rust);">Couldn't reach the assistant.</p>`;
     } finally {
