@@ -185,8 +185,11 @@
   .result-actions{
     display:flex;
     justify-content:flex-end;
+    gap:12px;
     margin-top:16px;
   }
+  .packing-check{list-style:none; margin-left:-22px;}
+  .packing-check input{margin-right:9px; accent-color:var(--rust);}
   .download-btn{
     display:none;
     align-items:center;
@@ -202,6 +205,38 @@
     cursor:pointer;
   }
   .download-btn:hover{background:#d5ac56;}
+  .confirm-btn{
+    display:none;
+    align-items:center;
+    gap:8px;
+    font-family:'Inter', sans-serif;
+    font-weight:600;
+    font-size:14px;
+    background:var(--rust);
+    color:var(--white);
+    border:none;
+    padding:12px 18px;
+    border-radius:3px;
+    cursor:pointer;
+  }
+  .confirm-btn:hover{background:#8E3925;}
+  .packing-section{display:none; margin-top:40px;}
+  .packing-controls{
+    display:grid;
+    grid-template-columns:1fr auto;
+    gap:18px;
+    align-items:end;
+    margin-top:22px;
+  }
+  .packing-weather{
+    display:none;
+    margin:20px 0;
+    padding:12px 15px;
+    border-left:4px solid var(--brass);
+    background:rgba(200,155,60,0.12);
+    font-size:14px;
+  }
+  .packing-output{display:none; margin-top:20px;}
 
   .error-box{
     background:rgba(166,67,47,0.15);
@@ -264,6 +299,8 @@
     .chat-bubble{max-width:90%;}
     .chat-compose{align-items:stretch;}
     .chat-compose button.go{width:auto;}
+    .packing-controls{grid-template-columns:1fr;}
+    .packing-controls button.go{width:100%;}
   }
 
   @media print{
@@ -317,7 +354,11 @@
         <label for="days">Days</label>
         <input type="number" id="days" min="1" max="14" placeholder="3" required />
       </div>
-      <div class="field full">
+      <div class="field">
+        <label for="people">Number of travellers</label>
+        <input type="number" id="people" min="1" max="20" value="1" required />
+      </div>
+      <div class="field">
         <label for="budget">Total budget (₹)</label>
         <input type="number" id="budget" min="500" placeholder="8000" required />
       </div>
@@ -347,6 +388,28 @@
     <div class="plan-output" id="planOutput"></div>
     <div class="result-actions">
       <button type="button" id="downloadPdfBtn" class="download-btn">↓ Download PDF</button>
+      <button type="button" id="confirmPlanBtn" class="confirm-btn">✓ Confirm this plan</button>
+    </div>
+  </div>
+
+  <div id="packingSection" class="packing-section">
+    <div class="plan-output" style="padding:32px;">
+      <h2 style="margin-top:0;">AI packing assistant</h2>
+      <p style="opacity:0.72;">Your confirmed itinerary, group size, current destination forecast, and travel style will shape this checklist.</p>
+      <div class="packing-controls">
+        <div>
+          <label for="travelStyle">How do you like to pack?</label>
+          <select id="travelStyle">
+            <option value="light">Light — essentials only</option>
+            <option value="balanced" selected>Balanced — comfort without excess</option>
+            <option value="prepared">Prepared — ready for most situations</option>
+          </select>
+        </div>
+        <button type="button" id="generatePackingBtn" class="go">Build my packing list →</button>
+      </div>
+      <div id="packingStatus" class="status-line" style="display:none; margin-top:22px;"><span class="dot"></span> Checking weather and packing your bags…</div>
+      <div id="packingWeather" class="packing-weather"></div>
+      <div id="packingOutput" class="packing-output"></div>
     </div>
   </div>
 
@@ -369,8 +432,11 @@
 <script>
   // Change this to your deployed backend URL once you deploy to Render.
   const API_URL = "https://travel-planner-backend-nlwx.onrender.com/plan-trip";
+  const PACKING_URL = "https://travel-planner-backend-nlwx.onrender.com/packing-list";
   let currentDestination = '';
   let currentItinerary = '';
+  let currentDays = 0;
+  let currentPeople = 1;
   let chatHistory = [];
 
   const chipsContainer = document.getElementById('chips');
@@ -396,6 +462,7 @@
       .replace(/^## (.*$)/gim, '<h2>$1</h2>')
       .replace(/^# (.*$)/gim, '<h1>$1</h1>')
       .replace(/\*\*(.*?)\*\*/gim, '<strong>$1</strong>')
+      .replace(/^- \[ \] (.*$)/gim, '<li class="packing-check"><input type="checkbox">$1</li>')
       .replace(/^- (.*$)/gim, '<li>$1</li>')
       .replace(/^\d+\.\s+(.*$)/gim, '<li>$1</li>');
 
@@ -416,6 +483,7 @@
 
     const destination = document.getElementById('destination').value.trim();
     const days = parseInt(document.getElementById('days').value, 10);
+    const people = parseInt(document.getElementById('people').value, 10);
     const budget = parseInt(document.getElementById('budget').value, 10);
     const interests = Array.from(selectedInterests);
 
@@ -429,11 +497,16 @@
     const planOutput = document.getElementById('planOutput');
     const goBtn = document.getElementById('goBtn');
     const downloadPdfBtn = document.getElementById('downloadPdfBtn');
+    const confirmPlanBtn = document.getElementById('confirmPlanBtn');
 
     results.classList.add('show');
     statusLine.style.display = 'flex';
     planOutput.innerHTML = '';
     downloadPdfBtn.style.display = 'none';
+    confirmPlanBtn.style.display = 'none';
+    confirmPlanBtn.disabled = false;
+    confirmPlanBtn.textContent = '✓ Confirm this plan';
+    document.getElementById('packingSection').style.display = 'none';
     goBtn.disabled = true;
     goBtn.textContent = 'Working…';
 
@@ -451,10 +524,13 @@
       const data = await response.json();
       currentDestination = destination;
       currentItinerary = data.final_plan || '';
+      currentDays = days;
+      currentPeople = people;
       chatHistory = [];
       statusLine.style.display = 'none';
       planOutput.innerHTML = renderPlan(currentItinerary || 'No plan returned.');
       downloadPdfBtn.style.display = 'inline-flex';
+      confirmPlanBtn.style.display = 'inline-flex';
       document.getElementById('answerBox').innerHTML = '';
       document.getElementById('answerBox').style.display = 'flex';
       appendChatMessage('assistant', `Your ${destination} itinerary is ready. Ask me anything about it!`);
@@ -477,6 +553,57 @@
       document.title = originalTitle;
     }, { once: true });
     window.print();
+  });
+
+  document.getElementById('confirmPlanBtn').addEventListener('click', () => {
+    const packingSection = document.getElementById('packingSection');
+    const confirmPlanBtn = document.getElementById('confirmPlanBtn');
+    packingSection.style.display = 'block';
+    confirmPlanBtn.textContent = '✓ Plan confirmed';
+    confirmPlanBtn.disabled = true;
+    packingSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+
+  document.getElementById('generatePackingBtn').addEventListener('click', async () => {
+    const packingBtn = document.getElementById('generatePackingBtn');
+    const packingStatus = document.getElementById('packingStatus');
+    const packingWeather = document.getElementById('packingWeather');
+    const packingOutput = document.getElementById('packingOutput');
+
+    packingBtn.disabled = true;
+    packingStatus.style.display = 'flex';
+    packingWeather.style.display = 'none';
+    packingOutput.style.display = 'none';
+
+    try {
+      const response = await fetch(PACKING_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          destination: currentDestination,
+          days: currentDays,
+          people: currentPeople,
+          travel_style: document.getElementById('travelStyle').value,
+          itinerary: currentItinerary
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`Server responded with ${response.status}`);
+      }
+
+      const data = await response.json();
+      packingWeather.textContent = `☁ Current weather signal: ${data.weather_summary}`;
+      packingWeather.style.display = 'block';
+      packingOutput.innerHTML = renderPlan(data.packing_list || 'No packing list returned.');
+      packingOutput.style.display = 'block';
+    } catch (err) {
+      packingOutput.innerHTML = `<div class="error-box" style="color:var(--rust);">Couldn't build the packing list: ${err.message}</div>`;
+      packingOutput.style.display = 'block';
+    } finally {
+      packingStatus.style.display = 'none';
+      packingBtn.disabled = false;
+    }
   });
 
   function appendChatMessage(role, text, state = '') {
