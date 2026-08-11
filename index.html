@@ -307,8 +307,10 @@
     @page{size:A4; margin:15mm;}
     body{background:#fff; color:#000;}
     body *{visibility:hidden;}
-    #planOutput, #planOutput *{visibility:visible;}
-    #planOutput{
+    body.print-plan #planOutput, body.print-plan #planOutput *,
+    body.print-packing #packingCard, body.print-packing #packingCard *{visibility:visible;}
+    body.print-plan #planOutput,
+    body.print-packing #packingCard{
       position:absolute;
       inset:0;
       width:100%;
@@ -318,9 +320,16 @@
       box-shadow:none;
       font-size:11pt;
     }
-    #planOutput h1{color:#14213D;}
-    #planOutput h2{break-after:avoid;}
-    #planOutput p, #planOutput li{orphans:3; widows:3;}
+    body.print-packing .packing-controls,
+    body.print-packing #packingStatus,
+    body.print-packing .packing-actions{display:none !important;}
+    body.print-packing #packingWeather,
+    body.print-packing #packingOutput{display:block !important;}
+    #planOutput h1, #packingCard h1{color:#14213D;}
+    #planOutput h2, #packingCard h2{break-after:avoid;}
+    #planOutput p, #planOutput li,
+    #packingCard p, #packingCard li{orphans:3; widows:3;}
+    .packing-check input{appearance:none; width:12px; height:12px; border:1px solid #000; vertical-align:middle;}
   }
 </style>
 </head>
@@ -393,7 +402,7 @@
   </div>
 
   <div id="packingSection" class="packing-section">
-    <div class="plan-output" style="padding:32px;">
+    <div class="plan-output" id="packingCard" style="padding:32px;">
       <h2 style="margin-top:0;">AI packing assistant</h2>
       <p style="opacity:0.72;">Your confirmed itinerary, group size, current destination forecast, and travel style will shape this checklist.</p>
       <div class="packing-controls">
@@ -410,6 +419,9 @@
       <div id="packingStatus" class="status-line" style="display:none; margin-top:22px;"><span class="dot"></span> Checking weather and packing your bags…</div>
       <div id="packingWeather" class="packing-weather"></div>
       <div id="packingOutput" class="packing-output"></div>
+      <div class="result-actions packing-actions">
+        <button type="button" id="downloadPackingBtn" class="download-btn">↓ Download packing checklist</button>
+      </div>
     </div>
   </div>
 
@@ -507,6 +519,9 @@
     confirmPlanBtn.disabled = false;
     confirmPlanBtn.textContent = '✓ Confirm this plan';
     document.getElementById('packingSection').style.display = 'none';
+    document.getElementById('packingWeather').style.display = 'none';
+    document.getElementById('packingOutput').style.display = 'none';
+    document.getElementById('downloadPackingBtn').style.display = 'none';
     goBtn.disabled = true;
     goBtn.textContent = 'Working…';
 
@@ -549,8 +564,21 @@
   document.getElementById('downloadPdfBtn').addEventListener('click', () => {
     const originalTitle = document.title;
     document.title = `Waypoint - ${currentDestination} Travel Plan`;
+    document.body.classList.add('print-plan');
     window.addEventListener('afterprint', () => {
       document.title = originalTitle;
+      document.body.classList.remove('print-plan');
+    }, { once: true });
+    window.print();
+  });
+
+  document.getElementById('downloadPackingBtn').addEventListener('click', () => {
+    const originalTitle = document.title;
+    document.title = `Waypoint - ${currentDestination} Packing Checklist`;
+    document.body.classList.add('print-packing');
+    window.addEventListener('afterprint', () => {
+      document.title = originalTitle;
+      document.body.classList.remove('print-packing');
     }, { once: true });
     window.print();
   });
@@ -569,11 +597,13 @@
     const packingStatus = document.getElementById('packingStatus');
     const packingWeather = document.getElementById('packingWeather');
     const packingOutput = document.getElementById('packingOutput');
+    const downloadPackingBtn = document.getElementById('downloadPackingBtn');
 
     packingBtn.disabled = true;
     packingStatus.style.display = 'flex';
     packingWeather.style.display = 'none';
     packingOutput.style.display = 'none';
+    downloadPackingBtn.style.display = 'none';
 
     try {
       const response = await fetch(PACKING_URL, {
@@ -597,6 +627,7 @@
       packingWeather.style.display = 'block';
       packingOutput.innerHTML = renderPlan(data.packing_list || 'No packing list returned.');
       packingOutput.style.display = 'block';
+      downloadPackingBtn.style.display = 'inline-flex';
     } catch (err) {
       packingOutput.innerHTML = `<div class="error-box" style="color:var(--rust);">Couldn't build the packing list: ${err.message}</div>`;
       packingOutput.style.display = 'block';
