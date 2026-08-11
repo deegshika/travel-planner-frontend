@@ -182,6 +182,26 @@
   .plan-output ul, .plan-output ol{padding-left:22px;}
   .plan-output li{margin-bottom:8px;}
   .plan-output strong{color:var(--rust);}
+  .result-actions{
+    display:flex;
+    justify-content:flex-end;
+    margin-top:16px;
+  }
+  .download-btn{
+    display:none;
+    align-items:center;
+    gap:8px;
+    font-family:'Inter', sans-serif;
+    font-weight:600;
+    font-size:14px;
+    background:var(--brass);
+    color:var(--ink);
+    border:none;
+    padding:12px 18px;
+    border-radius:3px;
+    cursor:pointer;
+  }
+  .download-btn:hover{background:#d5ac56;}
 
   .error-box{
     background:rgba(166,67,47,0.15);
@@ -245,6 +265,26 @@
     .chat-compose{align-items:stretch;}
     .chat-compose button.go{width:auto;}
   }
+
+  @media print{
+    @page{size:A4; margin:15mm;}
+    body{background:#fff; color:#000;}
+    body *{visibility:hidden;}
+    #planOutput, #planOutput *{visibility:visible;}
+    #planOutput{
+      position:absolute;
+      inset:0;
+      width:100%;
+      padding:0;
+      background:#fff;
+      color:#000;
+      box-shadow:none;
+      font-size:11pt;
+    }
+    #planOutput h1{color:#14213D;}
+    #planOutput h2{break-after:avoid;}
+    #planOutput p, #planOutput li{orphans:3; widows:3;}
+  }
 </style>
 </head>
 <body>
@@ -305,6 +345,9 @@
   <div id="results">
     <div class="status-line" id="statusLine"><span class="dot"></span> Building your itinerary…</div>
     <div class="plan-output" id="planOutput"></div>
+    <div class="result-actions">
+      <button type="button" id="downloadPdfBtn" class="download-btn">↓ Download PDF</button>
+    </div>
   </div>
 
   <div id="askSection" style="display:none; margin-top: 40px;">
@@ -385,10 +428,12 @@
     const statusLine = document.getElementById('statusLine');
     const planOutput = document.getElementById('planOutput');
     const goBtn = document.getElementById('goBtn');
+    const downloadPdfBtn = document.getElementById('downloadPdfBtn');
 
     results.classList.add('show');
     statusLine.style.display = 'flex';
     planOutput.innerHTML = '';
+    downloadPdfBtn.style.display = 'none';
     goBtn.disabled = true;
     goBtn.textContent = 'Working…';
 
@@ -409,6 +454,7 @@
       chatHistory = [];
       statusLine.style.display = 'none';
       planOutput.innerHTML = renderPlan(currentItinerary || 'No plan returned.');
+      downloadPdfBtn.style.display = 'inline-flex';
       document.getElementById('answerBox').innerHTML = '';
       document.getElementById('answerBox').style.display = 'flex';
       appendChatMessage('assistant', `Your ${destination} itinerary is ready. Ask me anything about it!`);
@@ -423,6 +469,15 @@
   });
 
   const ASK_URL = "https://travel-planner-backend-nlwx.onrender.com/ask";
+
+  document.getElementById('downloadPdfBtn').addEventListener('click', () => {
+    const originalTitle = document.title;
+    document.title = `Waypoint - ${currentDestination} Travel Plan`;
+    window.addEventListener('afterprint', () => {
+      document.title = originalTitle;
+    }, { once: true });
+    window.print();
+  });
 
   function appendChatMessage(role, text, state = '') {
     const answerBox = document.getElementById('answerBox');
