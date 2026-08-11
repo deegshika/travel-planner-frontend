@@ -250,6 +250,24 @@
   }
   .replace-panel .grid{gap:18px;}
   .replace-status{display:none; margin-top:14px; font-size:13px; color:var(--rust);}
+  .replacement-preview{display:none; margin-top:18px;}
+  .replacement-preview h3{font-family:'Fraunces', serif; margin:0 0 14px; color:var(--rust);}
+  .replacement-change{padding:14px 16px; border-radius:4px; margin-bottom:10px; white-space:pre-wrap;}
+  .replacement-change.old{background:rgba(166,67,47,0.10); border-left:4px solid var(--rust);}
+  .replacement-change.new{background:rgba(68,130,76,0.12); border-left:4px solid #44824c;}
+  .replacement-notice{
+    display:none;
+    align-items:center;
+    justify-content:space-between;
+    gap:16px;
+    margin-bottom:14px;
+    padding:13px 16px;
+    border-radius:4px;
+    background:rgba(200,155,60,0.18);
+    color:var(--parchment);
+    border:1px solid var(--brass);
+  }
+  .replacement-highlight{background:#ffe58a; border-radius:3px; padding:2px 3px;}
   .packing-section{display:none; margin-top:40px;}
   .packing-controls{
     display:grid;
@@ -424,29 +442,48 @@
 
   <div id="results">
     <div class="status-line" id="statusLine"><span class="dot"></span> Building your itinerary…</div>
+    <div id="replacementNotice" class="replacement-notice">
+      <span id="replacementNoticeText"></span>
+      <button type="button" id="jumpToReplacementBtn" class="secondary-btn" style="display:inline-flex;">Jump to change ↓</button>
+    </div>
     <div class="plan-output" id="planOutput"></div>
     <div class="result-actions">
       <button type="button" id="editPlanBtn" class="secondary-btn">✎ Edit itinerary</button>
       <button type="button" id="replaceActivityBtn" class="secondary-btn">↻ Replace activity</button>
+      <button type="button" id="undoReplaceBtn" class="secondary-btn">↶ Undo replacement</button>
       <button type="button" id="downloadPdfBtn" class="download-btn">↓ Download PDF</button>
       <button type="button" id="confirmPlanBtn" class="confirm-btn">✓ Confirm this plan</button>
     </div>
     <div id="replacePanel" class="replace-panel">
-      <div class="grid">
-        <div class="field">
-          <label for="activityToReplace">Activity to replace</label>
-          <input type="text" id="activityToReplace" placeholder="e.g. Bangalore Palace" maxlength="500" />
+      <div id="replaceRequestForm">
+        <div class="grid">
+          <div class="field">
+            <label for="activityToReplace">Activity to replace</label>
+            <input type="text" id="activityToReplace" placeholder="e.g. Bangalore Palace" maxlength="500" />
+          </div>
+          <div class="field">
+            <label for="replacementPreference">What would you prefer?</label>
+            <input type="text" id="replacementPreference" placeholder="e.g. a quiet nature activity" maxlength="1000" />
+          </div>
         </div>
-        <div class="field">
-          <label for="replacementPreference">What would you prefer?</label>
-          <input type="text" id="replacementPreference" placeholder="e.g. a quiet nature activity" maxlength="1000" />
+        <div class="result-actions">
+          <button type="button" id="cancelReplaceBtn" class="secondary-btn" style="display:inline-flex;">Cancel</button>
+          <button type="button" id="submitReplaceBtn" class="go">Find replacement →</button>
         </div>
-      </div>
-      <div class="result-actions">
-        <button type="button" id="cancelReplaceBtn" class="secondary-btn" style="display:inline-flex;">Cancel</button>
-        <button type="button" id="submitReplaceBtn" class="go">Find replacement →</button>
       </div>
       <div id="replaceStatus" class="replace-status"></div>
+      <div id="replacementPreview" class="replacement-preview">
+        <h3 id="replacementDayLabel"></h3>
+        <label>Remove</label>
+        <div id="replacementOldText" class="replacement-change old"></div>
+        <label>Replace with</label>
+        <div id="replacementNewText" class="replacement-change new"></div>
+        <p id="replacementReason"></p>
+        <div class="result-actions">
+          <button type="button" id="cancelPreviewBtn" class="secondary-btn" style="display:inline-flex;">Keep original</button>
+          <button type="button" id="applyReplacementBtn" class="go">Apply replacement →</button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -501,6 +538,9 @@
   let currentPeople = 1;
   let chatHistory = [];
   let isEditingPlan = false;
+  let pendingReplacement = null;
+  let lastReplacement = null;
+  let highlightedReplacement = null;
 
   const chipsContainer = document.getElementById('chips');
   const selectedInterests = new Set();
@@ -563,6 +603,7 @@
     const confirmPlanBtn = document.getElementById('confirmPlanBtn');
     const editPlanBtn = document.getElementById('editPlanBtn');
     const replaceActivityBtn = document.getElementById('replaceActivityBtn');
+    const undoReplaceBtn = document.getElementById('undoReplaceBtn');
 
     results.classList.add('show');
     statusLine.style.display = 'flex';
@@ -574,6 +615,11 @@
     editPlanBtn.style.display = 'none';
     editPlanBtn.textContent = '✎ Edit itinerary';
     replaceActivityBtn.style.display = 'none';
+    undoReplaceBtn.style.display = 'none';
+    document.getElementById('replacementNotice').style.display = 'none';
+    pendingReplacement = null;
+    lastReplacement = null;
+    highlightedReplacement = null;
     document.getElementById('replacePanel').style.display = 'none';
     planOutput.contentEditable = 'false';
     planOutput.classList.remove('editing');
@@ -662,6 +708,52 @@
     appendChatMessage('assistant', 'Your itinerary was updated. Ask me anything about the revised plan!');
   }
 
+  function clearReplacementHistory() {
+    lastReplacement = null;
+    highlightedReplacement = null;
+    document.getElementById('undoReplaceBtn').style.display = 'none';
+    document.getElementById('replacementNotice').style.display = 'none';
+  }
+
+  function resetReplacementPanel() {
+    pendingReplacement = null;
+    document.getElementById('replaceRequestForm').style.display = 'block';
+    document.getElementById('replacementPreview').style.display = 'none';
+    document.getElementById('replaceStatus').style.display = 'none';
+  }
+
+  function highlightReplacement(markdown) {
+    const planOutput = document.getElementById('planOutput');
+    const temporary = document.createElement('div');
+    temporary.innerHTML = renderPlan(markdown);
+    const candidates = temporary.innerText
+      .split('\n')
+      .map(line => line.trim())
+      .filter(line => line.length > 5)
+      .sort((a, b) => b.length - a.length);
+    const walker = document.createTreeWalker(planOutput, NodeFilter.SHOW_TEXT);
+
+    while (walker.nextNode()) {
+      const node = walker.currentNode;
+      for (const candidate of candidates) {
+        const index = node.nodeValue.indexOf(candidate);
+        if (index < 0) continue;
+        const range = document.createRange();
+        range.setStart(node, index);
+        range.setEnd(node, index + candidate.length);
+        const mark = document.createElement('mark');
+        mark.className = 'replacement-highlight';
+        range.surroundContents(mark);
+        highlightedReplacement = mark;
+        mark.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
+      }
+    }
+
+    highlightedReplacement = planOutput;
+    planOutput.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
   document.getElementById('editPlanBtn').addEventListener('click', () => {
     const planOutput = document.getElementById('planOutput');
     const editPlanBtn = document.getElementById('editPlanBtn');
@@ -681,6 +773,7 @@
     editPlanBtn.textContent = '✎ Edit itinerary';
     invalidatePlanConfirmation();
     resetChatForUpdatedPlan();
+    clearReplacementHistory();
   });
 
   document.getElementById('replaceActivityBtn').addEventListener('click', () => {
@@ -693,12 +786,18 @@
       document.getElementById('activityToReplace').value = selectedText.slice(0, 500);
     }
     document.getElementById('replacePanel').style.display = 'block';
-    document.getElementById('replaceStatus').style.display = 'none';
+    resetReplacementPanel();
     document.getElementById('activityToReplace').focus();
   });
 
   document.getElementById('cancelReplaceBtn').addEventListener('click', () => {
     document.getElementById('replacePanel').style.display = 'none';
+    resetReplacementPanel();
+  });
+
+  document.getElementById('cancelPreviewBtn').addEventListener('click', () => {
+    document.getElementById('replacePanel').style.display = 'none';
+    resetReplacementPanel();
   });
 
   document.getElementById('submitReplaceBtn').addEventListener('click', async () => {
@@ -715,7 +814,7 @@
 
     submitReplaceBtn.disabled = true;
     submitReplaceBtn.textContent = 'Finding an alternative…';
-    replaceStatus.textContent = 'Searching the local guide and revising only this activity…';
+    replaceStatus.textContent = 'Searching the local guide and preparing a preview…';
     replaceStatus.style.display = 'block';
 
     try {
@@ -735,20 +834,72 @@
       }
 
       const data = await response.json();
-      currentItinerary = data.updated_itinerary;
-      document.getElementById('planOutput').innerHTML = renderPlan(currentItinerary);
-      invalidatePlanConfirmation();
-      resetChatForUpdatedPlan();
-      document.getElementById('replacePanel').style.display = 'none';
-      document.getElementById('activityToReplace').value = '';
-      document.getElementById('replacementPreference').value = '';
-      document.getElementById('planOutput').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      if (!currentItinerary.includes(data.matched_text)) {
+        throw new Error('The proposed change no longer matches this itinerary.');
+      }
+      pendingReplacement = data;
+      document.getElementById('replacementDayLabel').textContent = data.day_label;
+      document.getElementById('replacementOldText').textContent = data.matched_text;
+      document.getElementById('replacementNewText').textContent = data.replacement_text;
+      document.getElementById('replacementReason').textContent = `Why this fits: ${data.reason}`;
+      document.getElementById('replaceRequestForm').style.display = 'none';
+      replaceStatus.style.display = 'none';
+      document.getElementById('replacementPreview').style.display = 'block';
     } catch (err) {
       replaceStatus.textContent = `Couldn't replace the activity: ${err.message}`;
     } finally {
       submitReplaceBtn.disabled = false;
       submitReplaceBtn.textContent = 'Find replacement →';
     }
+  });
+
+  document.getElementById('applyReplacementBtn').addEventListener('click', () => {
+    if (!pendingReplacement || !currentItinerary.includes(pendingReplacement.matched_text)) {
+      alert('This replacement no longer matches the current itinerary. Please request it again.');
+      return;
+    }
+
+    const previousItinerary = currentItinerary;
+    currentItinerary = currentItinerary.replace(
+      pendingReplacement.matched_text,
+      pendingReplacement.replacement_text
+    );
+    lastReplacement = {
+      previousItinerary,
+      replacement: { ...pendingReplacement }
+    };
+
+    document.getElementById('planOutput').innerHTML = renderPlan(currentItinerary);
+    document.getElementById('undoReplaceBtn').style.display = 'inline-flex';
+    document.getElementById('replacementNoticeText').textContent =
+      `Updated ${pendingReplacement.day_label}: ${pendingReplacement.reason}`;
+    document.getElementById('replacementNotice').style.display = 'flex';
+    invalidatePlanConfirmation();
+    resetChatForUpdatedPlan();
+
+    const replacementText = pendingReplacement.replacement_text;
+    document.getElementById('replacePanel').style.display = 'none';
+    document.getElementById('activityToReplace').value = '';
+    document.getElementById('replacementPreference').value = '';
+    resetReplacementPanel();
+    highlightReplacement(replacementText);
+  });
+
+  document.getElementById('jumpToReplacementBtn').addEventListener('click', () => {
+    (highlightedReplacement || document.getElementById('planOutput')).scrollIntoView({
+      behavior: 'smooth',
+      block: 'center'
+    });
+  });
+
+  document.getElementById('undoReplaceBtn').addEventListener('click', () => {
+    if (!lastReplacement) return;
+    currentItinerary = lastReplacement.previousItinerary;
+    document.getElementById('planOutput').innerHTML = renderPlan(currentItinerary);
+    invalidatePlanConfirmation();
+    resetChatForUpdatedPlan();
+    clearReplacementHistory();
+    document.getElementById('planOutput').scrollIntoView({ behavior: 'smooth', block: 'start' });
   });
 
   document.getElementById('confirmPlanBtn').addEventListener('click', () => {
