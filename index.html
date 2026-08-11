@@ -184,6 +184,7 @@
   .plan-output strong{color:var(--rust);}
   .result-actions{
     display:flex;
+    flex-wrap:wrap;
     justify-content:flex-end;
     gap:12px;
     margin-top:16px;
@@ -220,6 +221,35 @@
     cursor:pointer;
   }
   .confirm-btn:hover{background:#8E3925;}
+  .secondary-btn{
+    display:none;
+    align-items:center;
+    font-family:'Inter', sans-serif;
+    font-weight:600;
+    font-size:14px;
+    background:var(--white);
+    color:var(--ink);
+    border:1.5px solid var(--line);
+    padding:11px 17px;
+    border-radius:3px;
+    cursor:pointer;
+  }
+  .secondary-btn:hover{border-color:var(--rust); color:var(--rust);}
+  #planOutput.editing{
+    outline:3px solid var(--brass);
+    outline-offset:4px;
+    cursor:text;
+  }
+  .replace-panel{
+    display:none;
+    margin-top:16px;
+    padding:24px;
+    border-radius:4px;
+    background:var(--parchment-2);
+    color:var(--ink);
+  }
+  .replace-panel .grid{gap:18px;}
+  .replace-status{display:none; margin-top:14px; font-size:13px; color:var(--rust);}
   .packing-section{display:none; margin-top:40px;}
   .packing-controls{
     display:grid;
@@ -396,8 +426,27 @@
     <div class="status-line" id="statusLine"><span class="dot"></span> Building your itinerary…</div>
     <div class="plan-output" id="planOutput"></div>
     <div class="result-actions">
+      <button type="button" id="editPlanBtn" class="secondary-btn">✎ Edit itinerary</button>
+      <button type="button" id="replaceActivityBtn" class="secondary-btn">↻ Replace activity</button>
       <button type="button" id="downloadPdfBtn" class="download-btn">↓ Download PDF</button>
       <button type="button" id="confirmPlanBtn" class="confirm-btn">✓ Confirm this plan</button>
+    </div>
+    <div id="replacePanel" class="replace-panel">
+      <div class="grid">
+        <div class="field">
+          <label for="activityToReplace">Activity to replace</label>
+          <input type="text" id="activityToReplace" placeholder="e.g. Bangalore Palace" maxlength="500" />
+        </div>
+        <div class="field">
+          <label for="replacementPreference">What would you prefer?</label>
+          <input type="text" id="replacementPreference" placeholder="e.g. a quiet nature activity" maxlength="1000" />
+        </div>
+      </div>
+      <div class="result-actions">
+        <button type="button" id="cancelReplaceBtn" class="secondary-btn" style="display:inline-flex;">Cancel</button>
+        <button type="button" id="submitReplaceBtn" class="go">Find replacement →</button>
+      </div>
+      <div id="replaceStatus" class="replace-status"></div>
     </div>
   </div>
 
@@ -445,11 +494,13 @@
   // Change this to your deployed backend URL once you deploy to Render.
   const API_URL = "https://travel-planner-backend-nlwx.onrender.com/plan-trip";
   const PACKING_URL = "https://travel-planner-backend-nlwx.onrender.com/packing-list";
+  const REPLACE_URL = "https://travel-planner-backend-nlwx.onrender.com/replace-activity";
   let currentDestination = '';
   let currentItinerary = '';
   let currentDays = 0;
   let currentPeople = 1;
   let chatHistory = [];
+  let isEditingPlan = false;
 
   const chipsContainer = document.getElementById('chips');
   const selectedInterests = new Set();
@@ -510,6 +561,8 @@
     const goBtn = document.getElementById('goBtn');
     const downloadPdfBtn = document.getElementById('downloadPdfBtn');
     const confirmPlanBtn = document.getElementById('confirmPlanBtn');
+    const editPlanBtn = document.getElementById('editPlanBtn');
+    const replaceActivityBtn = document.getElementById('replaceActivityBtn');
 
     results.classList.add('show');
     statusLine.style.display = 'flex';
@@ -518,6 +571,13 @@
     confirmPlanBtn.style.display = 'none';
     confirmPlanBtn.disabled = false;
     confirmPlanBtn.textContent = '✓ Confirm this plan';
+    editPlanBtn.style.display = 'none';
+    editPlanBtn.textContent = '✎ Edit itinerary';
+    replaceActivityBtn.style.display = 'none';
+    document.getElementById('replacePanel').style.display = 'none';
+    planOutput.contentEditable = 'false';
+    planOutput.classList.remove('editing');
+    isEditingPlan = false;
     document.getElementById('packingSection').style.display = 'none';
     document.getElementById('packingWeather').style.display = 'none';
     document.getElementById('packingOutput').style.display = 'none';
@@ -546,6 +606,8 @@
       planOutput.innerHTML = renderPlan(currentItinerary || 'No plan returned.');
       downloadPdfBtn.style.display = 'inline-flex';
       confirmPlanBtn.style.display = 'inline-flex';
+      editPlanBtn.style.display = 'inline-flex';
+      replaceActivityBtn.style.display = 'inline-flex';
       document.getElementById('answerBox').innerHTML = '';
       document.getElementById('answerBox').style.display = 'flex';
       appendChatMessage('assistant', `Your ${destination} itinerary is ready. Ask me anything about it!`);
@@ -583,7 +645,117 @@
     window.print();
   });
 
+  function invalidatePlanConfirmation() {
+    const confirmPlanBtn = document.getElementById('confirmPlanBtn');
+    confirmPlanBtn.disabled = false;
+    confirmPlanBtn.textContent = '✓ Confirm updated plan';
+    document.getElementById('packingSection').style.display = 'none';
+    document.getElementById('packingWeather').style.display = 'none';
+    document.getElementById('packingOutput').style.display = 'none';
+    document.getElementById('downloadPackingBtn').style.display = 'none';
+  }
+
+  function resetChatForUpdatedPlan() {
+    chatHistory = [];
+    const answerBox = document.getElementById('answerBox');
+    answerBox.innerHTML = '';
+    appendChatMessage('assistant', 'Your itinerary was updated. Ask me anything about the revised plan!');
+  }
+
+  document.getElementById('editPlanBtn').addEventListener('click', () => {
+    const planOutput = document.getElementById('planOutput');
+    const editPlanBtn = document.getElementById('editPlanBtn');
+    isEditingPlan = !isEditingPlan;
+
+    if (isEditingPlan) {
+      planOutput.contentEditable = 'true';
+      planOutput.classList.add('editing');
+      editPlanBtn.textContent = '✓ Save edits';
+      planOutput.focus();
+      return;
+    }
+
+    currentItinerary = planOutput.innerText.trim();
+    planOutput.contentEditable = 'false';
+    planOutput.classList.remove('editing');
+    editPlanBtn.textContent = '✎ Edit itinerary';
+    invalidatePlanConfirmation();
+    resetChatForUpdatedPlan();
+  });
+
+  document.getElementById('replaceActivityBtn').addEventListener('click', () => {
+    if (isEditingPlan) {
+      alert('Save your itinerary edits before replacing an activity.');
+      return;
+    }
+    const selectedText = window.getSelection().toString().trim();
+    if (selectedText) {
+      document.getElementById('activityToReplace').value = selectedText.slice(0, 500);
+    }
+    document.getElementById('replacePanel').style.display = 'block';
+    document.getElementById('replaceStatus').style.display = 'none';
+    document.getElementById('activityToReplace').focus();
+  });
+
+  document.getElementById('cancelReplaceBtn').addEventListener('click', () => {
+    document.getElementById('replacePanel').style.display = 'none';
+  });
+
+  document.getElementById('submitReplaceBtn').addEventListener('click', async () => {
+    const activity = document.getElementById('activityToReplace').value.trim();
+    const replacementPreferences = document.getElementById('replacementPreference').value.trim();
+    const submitReplaceBtn = document.getElementById('submitReplaceBtn');
+    const replaceStatus = document.getElementById('replaceStatus');
+
+    if (!activity) {
+      replaceStatus.textContent = 'Enter the activity you want to replace.';
+      replaceStatus.style.display = 'block';
+      return;
+    }
+
+    submitReplaceBtn.disabled = true;
+    submitReplaceBtn.textContent = 'Finding an alternative…';
+    replaceStatus.textContent = 'Searching the local guide and revising only this activity…';
+    replaceStatus.style.display = 'block';
+
+    try {
+      const response = await fetch(REPLACE_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          destination: currentDestination,
+          itinerary: currentItinerary,
+          activity,
+          replacement_preferences: replacementPreferences
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`Server responded with ${response.status}`);
+      }
+
+      const data = await response.json();
+      currentItinerary = data.updated_itinerary;
+      document.getElementById('planOutput').innerHTML = renderPlan(currentItinerary);
+      invalidatePlanConfirmation();
+      resetChatForUpdatedPlan();
+      document.getElementById('replacePanel').style.display = 'none';
+      document.getElementById('activityToReplace').value = '';
+      document.getElementById('replacementPreference').value = '';
+      document.getElementById('planOutput').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } catch (err) {
+      replaceStatus.textContent = `Couldn't replace the activity: ${err.message}`;
+    } finally {
+      submitReplaceBtn.disabled = false;
+      submitReplaceBtn.textContent = 'Find replacement →';
+    }
+  });
+
   document.getElementById('confirmPlanBtn').addEventListener('click', () => {
+    if (isEditingPlan) {
+      alert('Save your itinerary edits before confirming the plan.');
+      return;
+    }
     const packingSection = document.getElementById('packingSection');
     const confirmPlanBtn = document.getElementById('confirmPlanBtn');
     packingSection.style.display = 'block';
