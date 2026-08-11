@@ -193,11 +193,57 @@
     margin-top:20px;
   }
 
+  .chat-window{
+    display:none;
+    flex-direction:column;
+    gap:12px;
+    max-height:460px;
+    overflow-y:auto;
+    margin:20px 0;
+    padding:20px;
+    border:1px solid var(--line);
+    border-radius:8px;
+    background:#e8e1d2;
+    background-image:radial-gradient(rgba(20,33,61,0.06) 1px, transparent 1px);
+    background-size:18px 18px;
+  }
+  .chat-message{display:flex; width:100%;}
+  .chat-message.user{justify-content:flex-end;}
+  .chat-message.assistant{justify-content:flex-start;}
+  .chat-bubble{
+    max-width:78%;
+    padding:11px 13px 7px;
+    border-radius:10px;
+    box-shadow:0 1px 2px rgba(20,33,61,0.16);
+    color:var(--ink);
+  }
+  .chat-message.user .chat-bubble{
+    background:#d8efc7;
+    border-bottom-right-radius:2px;
+  }
+  .chat-message.assistant .chat-bubble{
+    background:var(--white);
+    border-bottom-left-radius:2px;
+  }
+  .chat-message.error .chat-bubble{color:var(--rust);}
+  .chat-text{white-space:pre-wrap; line-height:1.55;}
+  .chat-time{
+    margin-top:3px;
+    text-align:right;
+    font-size:10px;
+    color:rgba(20,33,61,0.5);
+  }
+  .chat-message.typing .chat-text{color:var(--brass); font-style:italic;}
+  .chat-compose{display:flex; gap:12px; align-items:flex-end;}
+
   @media (max-width:640px){
     .grid{grid-template-columns:1fr;}
     .card{padding:26px;}
     .submit-row{flex-direction:column; align-items:stretch; gap:16px;}
     button.go{width:100%;}
+    .chat-bubble{max-width:90%;}
+    .chat-compose{align-items:stretch;}
+    .chat-compose button.go{width:auto;}
   }
 </style>
 </head>
@@ -265,11 +311,11 @@
     <div class="plan-output" style="padding: 32px;">
       <h2 style="margin-top:0;">Ask a local expert</h2>
       <p style="color: var(--ink); opacity: 0.7; margin-bottom: 20px;">Have a question about your trip? Ask anything — opening hours, what to pack, local etiquette.</p>
-      <div style="display:flex; gap: 12px;">
+      <div id="answerBox" class="chat-window" aria-live="polite"></div>
+      <div class="chat-compose">
         <input type="text" id="questionInput" placeholder="Is Hawa Mahal open on Mondays?" style="flex:1; border:none; border-bottom:2px solid var(--line); background:transparent; font-family:'Fraunces', serif; font-size:18px; padding:6px 2px 10px; color:var(--ink); outline:none;" />
-        <button type="button" id="askBtn" class="go" style="white-space:nowrap;">Ask →</button>
+        <button type="button" id="askBtn" class="go" style="white-space:nowrap;">Send →</button>
       </div>
-      <div id="answerBox" style="margin-top: 20px; display:none;"></div>
     </div>
   </div>
 
@@ -364,7 +410,8 @@
       statusLine.style.display = 'none';
       planOutput.innerHTML = renderPlan(currentItinerary || 'No plan returned.');
       document.getElementById('answerBox').innerHTML = '';
-      document.getElementById('answerBox').style.display = 'none';
+      document.getElementById('answerBox').style.display = 'flex';
+      appendChatMessage('assistant', `Your ${destination} itinerary is ready. Ask me anything about it!`);
       document.getElementById('askSection').style.display = 'block';
     } catch (err) {
       statusLine.style.display = 'none';
@@ -377,15 +424,42 @@
 
   const ASK_URL = "https://travel-planner-backend-nlwx.onrender.com/ask";
 
-  document.getElementById('askBtn').addEventListener('click', async () => {
-    const question = document.getElementById('questionInput').value.trim();
+  function appendChatMessage(role, text, state = '') {
+    const answerBox = document.getElementById('answerBox');
+    const message = document.createElement('div');
+    message.className = `chat-message ${role} ${state}`.trim();
+
+    const bubble = document.createElement('div');
+    bubble.className = 'chat-bubble';
+
+    const content = document.createElement('div');
+    content.className = 'chat-text';
+    content.textContent = text;
+
+    const time = document.createElement('div');
+    time.className = 'chat-time';
+    time.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    bubble.append(content, time);
+    message.appendChild(bubble);
+    answerBox.appendChild(message);
+    answerBox.scrollTop = answerBox.scrollHeight;
+    return message;
+  }
+
+  async function sendQuestion() {
+    const questionInput = document.getElementById('questionInput');
+    const question = questionInput.value.trim();
     if (!question) return;
 
     const answerBox = document.getElementById('answerBox');
     const askBtn = document.getElementById('askBtn');
-    answerBox.style.display = 'block';
-    answerBox.innerHTML = '<p style="color: var(--brass);">Thinking…</p>';
+    answerBox.style.display = 'flex';
+    appendChatMessage('user', question);
+    questionInput.value = '';
+    const typingMessage = appendChatMessage('assistant', 'Thinking…', 'typing');
     askBtn.disabled = true;
+    questionInput.disabled = true;
 
     try {
       const response = await fetch(ASK_URL, {
@@ -409,12 +483,23 @@
         { role: 'assistant', content: data.answer }
       );
       chatHistory = chatHistory.slice(-20);
-      answerBox.innerHTML = `<p>${data.answer.replace(/\n/g, '<br>')}</p>`;
-      document.getElementById('questionInput').value = '';
+      typingMessage.remove();
+      appendChatMessage('assistant', data.answer);
     } catch (err) {
-      answerBox.innerHTML = `<p style="color: var(--rust);">Couldn't reach the assistant.</p>`;
+      typingMessage.remove();
+      appendChatMessage('assistant', `Couldn't reach the assistant: ${err.message}`, 'error');
     } finally {
       askBtn.disabled = false;
+      questionInput.disabled = false;
+      questionInput.focus();
+    }
+  }
+
+  document.getElementById('askBtn').addEventListener('click', sendQuestion);
+  document.getElementById('questionInput').addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      sendQuestion();
     }
   });
 </script>
